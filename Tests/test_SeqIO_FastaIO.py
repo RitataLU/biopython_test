@@ -6,8 +6,10 @@
 """Tests for Bio.SeqIO.FastaIO module."""
 
 import unittest
+import warnings
 from io import StringIO
 
+from Bio import BiopythonParserWarning
 from Bio import SeqIO
 from Bio.SeqIO.FastaIO import FastaTwoLineParser
 from Bio.SeqIO.FastaIO import SimpleFastaParser
@@ -226,6 +228,45 @@ class TestFastaWithComments(unittest.TestCase):
         )
         self.assertRaises(ValueError, SeqIO.read, "Fasta/aster_pearson.pro", "fasta")
         self.assertRaises(ValueError, SeqIO.read, "Fasta/aster_blast.pro", "fasta")
+
+    def test_fasta_blast_multi(self):
+        """fasta-blast must keep id/seq pairing across multiple records."""
+        records = list(SeqIO.parse("Fasta/multi_blast.pro", "fasta-blast"))
+        self.assertEqual(
+            [(r.id, str(r.seq)) for r in records],
+            [
+                ("alpha", "ACGTACGT"),
+                ("beta", "GGGGAAAA"),
+                ("gamma", "TTTTCCCC"),
+            ],
+        )
+        self.assertEqual(records[1].description, "beta description two")
+        self.assertEqual(records[2].description, "gamma description three")
+
+    def test_fasta_blast_no_records(self):
+        """fasta-blast must raise on non-empty input with no '>' line."""
+        with self.assertRaises(ValueError):
+            list(SeqIO.parse(StringIO("# comment only\n"), "fasta-blast"))
+
+    def test_fasta_pearson_no_records(self):
+        """fasta-pearson must raise on non-empty input with no '>' line."""
+        with self.assertRaises(ValueError):
+            list(SeqIO.parse(StringIO("; pearson comment\nheader text\n"),
+                             "fasta-pearson"))
+
+
+class TestSimpleFastaParserNoRecords(unittest.TestCase):
+    """SimpleFastaParser must warn rather than silently yield zero records."""
+
+    def test_warns_when_no_records(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = list(SimpleFastaParser(StringIO("just text\nmore text\n")))
+        self.assertEqual(result, [])
+        self.assertTrue(
+            any(issubclass(w.category, BiopythonParserWarning) for w in caught),
+            f"Expected BiopythonParserWarning, got {[w.category for w in caught]}",
+        )
 
 
 if __name__ == "__main__":

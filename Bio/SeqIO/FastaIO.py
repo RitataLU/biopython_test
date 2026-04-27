@@ -16,6 +16,7 @@ You are expected to use this module via the Bio.SeqIO functions.
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio import BiopythonDeprecationWarning
+from Bio import BiopythonParserWarning
 
 
 from .Interfaces import _clean
@@ -50,12 +51,20 @@ def SimpleFastaParser(handle):
 
     """
     # Skip any text before the first record (e.g. blank lines, comments)
+    seen = False
     for line in handle:
+        seen = True
         if line[0] == ">":
             title = line[1:].rstrip()
             break
     else:
-        # no break encountered - probably an empty file
+        # The handle was non-empty but had no '>' line — almost certainly a
+        # non-FASTA file. Warn rather than fail silently so callers notice.
+        if seen:
+            warnings.warn(
+                "No FASTA records found (no '>' line in input).",
+                BiopythonParserWarning,
+            )
         return
 
     # Main logic
@@ -341,7 +350,9 @@ class FastaBlastIterator(SequenceIterator):
         if alphabet is not None:
             raise ValueError("The alphabet argument is no longer supported")
         super().__init__(source, fmt="FASTA")
+        seen = False
         for line in self.stream:
+            seen = True
             if line[0] not in "#!;":
                 if not line.startswith(">"):
                     raise ValueError(
@@ -354,6 +365,10 @@ class FastaBlastIterator(SequenceIterator):
                 self._line = line
                 break
         else:
+            if seen:
+                raise ValueError(
+                    "No FASTA records found (no '>' line in input)."
+                )
             self._line = None
 
     def __next__(self):
@@ -370,7 +385,7 @@ class FastaBlastIterator(SequenceIterator):
             if line[0] in "#!;":
                 pass
             elif line[0] == ">":
-                self_line = line
+                self._line = line
                 break
             else:
                 lines.append(line.rstrip())
@@ -441,11 +456,17 @@ class FastaPearsonIterator(SequenceIterator):
         if alphabet is not None:
             raise ValueError("The alphabet argument is no longer supported")
         super().__init__(source, fmt="Fasta")
+        seen = False
         for line in self.stream:
+            seen = True
             if line.startswith(">"):
                 self._line = line
                 break
         else:
+            if seen:
+                raise ValueError(
+                    "No FASTA records found (no '>' line in input)."
+                )
             self._line = None
 
     def __next__(self):
